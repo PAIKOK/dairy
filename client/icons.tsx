@@ -1,0 +1,22 @@
+import type {ReactNode} from 'react';
+const paths:Record<string,ReactNode>={
+ eraser:<><path d="m14 3 7 7-10 11H7l-5-5L14 3Z"/><path d="m8 9 7 7M11 21h11"/></>,
+ bookmark:<path d="M6 3h12v19l-6-5-6 5V3Z"/>,chart:<><path d="M3 3v18h18M6 15l4-5 4 3 6-8"/><circle cx="10" cy="10" r="1"/></>,palette:<><path d="M12 3C-1 3-1 20 10 21c6 1 2-5 5-5h3c8-1 5-13-6-13Z"/><circle cx="7" cy="9" r="1"/><circle cx="12" cy="6" r="1"/><circle cx="17" cy="9" r="1"/></>,sticker:<><path d="M21 13V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8Z"/><path d="M13 21v-6a2 2 0 0 1 2-2h6M7 8h2m6 0h2m-8 5c2 2 4 2 6 0"/></>,undo:<><path d="M4 10h10a6 6 0 0 1 0 12M4 10l5-5M4 10l5 5"/></>,draw:<><path d="M4 20c4-9 4 4 8-4s7 3 9-4M3 12l9-9 4 4-9 9-5 1Z"/></>,
+ book:<><path d="M12 5C8 2 4 3 2 4v16c4-2 7-2 10 0 3-2 6-2 10 0V4c-2-1-6-2-10 1v15"/><path d="M5 8h3M5 11h3m8-3h3m-3 3h3"/></>,
+ arrow:<path d="M4 12h16m-6-6 6 6-6 6"/>,up:<path d="M6 18 18 6M6 6h12v12"/>,left:<path d="m14 6-6 6 6 6"/>,right:<path d="m10 6 6 6-6 6"/>,
+ calendar:<><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 2v6m10-6v6M3 11h18m-13 4h1m5 0h1m-7 3h1"/></>,
+ pen:<><path d="m15 4 5 5M4 20l5-1L21 7a2 2 0 0 0-5-4L4 15v5ZM3 22h18"/></>,
+ leaf:<><path d="M20 3C8 1 1 8 6 16c7 7 16-1 14-13ZM4 21 16 9"/><path d="m8 16 1-6m3 2h5"/></>,
+ photo:<><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 7"/></>,
+ mail:<><rect x="2" y="5" width="20" height="15" rx="2"/><path d="m2 6 10 8L22 6"/></>,
+ music:<><path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2.5"/><ellipse cx="17" cy="16" rx="3" ry="2.5"/></>,
+ sun:<><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1"/></>,
+ lock:<><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V6a4 4 0 0 1 8 0v4m-4 5v2"/></>,
+ check:<path d="m5 12 4 4L19 6"/>,plus:<path d="M12 5v14M5 12h14"/>,close:<path d="m6 6 12 12M18 6 6 18"/>,menu:<path d="M4 7h16M4 12h16M4 17h16"/>,
+ search:<><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></>,settings:<><circle cx="12" cy="12" r="3"/><path d="m10 2-1 3-3 1-3-1-2 4 3 2v3l-2 2 2 4 3-1 3 1 1 3h4l1-3 3-1 3 1 2-4-3-2v-3l2-2-2-4-3 1-3-1-1-3Z"/></>,
+ heart:<path d="M12 21 3 12C-3 5 7-1 12 6c5-7 15-1 9 6Z"/>,logout:<><path d="M9 4H3v16h6m5-12 4 4-4 4m-7-4h14"/></>,
+ download:<><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></>,trash:<><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></>,
+ compass:<><circle cx="12" cy="12" r="9"/><path d="m16 8-3 5-5 3 3-5Z"/></>,eye:<><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></>,dots:<><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></>,
+};
+export function Icon({name,size=20}:{name:string;size?:number}) { return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]||paths.book}</svg>; }
+export function Botanical({growth=4, className=''}:{growth?:number;className?:string}) { return <svg className={`botanical ${className}`} viewBox="0 0 260 230" fill="none" aria-hidden="true"><path d="M18 214c58-10 162-7 225 0" stroke="#c2c9b4"/><g stroke="#71856b" strokeWidth="1.8" strokeLinecap="round"><path d="M129 210c-1-50 11-108-5-157M127 172c-22-18-32-39-35-60m38 33c20-10 35-29 39-51M127 100c-12-6-21-16-25-28"/>{growth>0&&<><path d="M127 175c-37-1-49-19-40-36 21 1 36 15 40 36Z" fill="#DCE7D1"/><path d="M130 148c35-1 50-16 45-35-23 0-39 17-45 35Z" fill="#C6D8BD"/></>}{growth>1&&<><path d="M127 115c-30-3-38-17-32-31 18 2 28 14 32 31Z" fill="#DDE8D4"/><path d="M133 98c26-1 36-17 31-29-17 3-27 14-31 29Z" fill="#B9CEAE"/></>}{growth>2&&<><path d="M125 77c-19-8-23-23-15-33 14 5 19 20 15 33Z" fill="#C5D6BA"/><path d="M125 57c-6-19-1-31 9-37 10 17 4 30-9 37Z" fill="#DCE7D1"/></>}{growth>3&&<><path d="M168 98c-1-13 4-24 17-27"/><path d="M177 80c-5-12 1-22 8-21 10-5 20 2 17 10 5 9-4 16-11 14-5 5-10 2-14-3Z" fill="#E7BAC4" stroke="#BE929D"/><circle cx="188" cy="72" r="3" fill="#DDC489" stroke="none"/></>}</g><g stroke="#8D9C79" strokeWidth="1.5"><path d="M56 211v-39m0 18c-18-1-24-12-18-19 11 1 16 9 18 19m0-12c14-1 20-10 16-17-10 1-15 8-16 17M207 211v-26m0 12c-10 0-16-8-13-13 8 0 11 6 13 13m0-6c10-2 14-8 11-14-7 1-10 7-11 14" fill="#DBE7D1"/></g></svg>; }

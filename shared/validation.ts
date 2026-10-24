@@ -1,0 +1,17 @@
+import {z} from 'zod';
+import {STICKER_KINDS} from './notebook';
+import {validDate,validZone} from './dates';
+export const dateSchema=z.string().refine(validDate,'Choose a real date between 1900 and 2200.');
+export const passwordSchema=z.string().min(10,'Use at least 10 characters.').max(200,'Use no more than 200 characters.');
+const email=z.string().trim().toLowerCase().email('Enter a valid email address.').max(254);
+export const signupSchema=z.object({name:z.string().trim().max(60).default(''),email,password:passwordSchema,timeZone:z.string().refine(validZone,'Choose a valid time zone.'),consent:z.literal(true,{error:'Confirm you are 18 or older and accept the terms.'})}).strict();
+export const loginSchema=z.object({email,password:z.string().min(1,'Enter your password.').max(200)}).strict();
+export const recoverySchema=z.object({email,code:z.string().min(1,'Enter your recovery code.').max(200),password:passwordSchema}).strict();
+export const notebookSchema=z.object({cover:z.enum(['sage','plum','rose','linen']),title:z.string().trim().min(1).max(60),paper:z.enum(['lined','dotted','plain','graph']),ink:z.enum(['plum','blue','forest']),font:z.enum(['hand','print']),coverPhotoId:z.string().uuid().nullable().optional()}).strict();
+export const pageDesignSchema=z.object({paper:notebookSchema.shape.paper,ink:notebookSchema.shape.ink,font:notebookSchema.shape.font,note:z.string().max(300),stickers:z.array(z.object({id:z.string().uuid(),kind:z.enum(STICKER_KINDS),x:z.number().min(0).max(100),y:z.number().min(0).max(100),rotation:z.number().min(-180).max(180),scale:z.number().min(.5).max(2),text:z.string().max(180).optional()}).strict()).max(30),doodles:z.array(z.object({id:z.string().uuid(),color:notebookSchema.shape.ink,width:z.number().min(1).max(8),points:z.array(z.tuple([z.number().min(0).max(100),z.number().min(0).max(100)])).min(2).max(180)}).strict()).max(30)}).strict();
+export const entrySchema=z.object({title:z.string().max(160),body:z.string().max(60000),mood:z.enum(['joyful','good','quiet','low','tough']).nullable(),favorite:z.boolean(),page:pageDesignSchema.optional(),version:z.number().int().min(0)}).strict();
+export const memorySchema=z.object({date:dateSchema,caption:z.string().trim().min(1,'Give this memory a caption.').max(240),alt:z.string().trim().min(1,'Describe the photo for screen readers.').max(400),photoId:z.string().uuid()}).strict();
+export const goalSchema=z.object({title:z.string().trim().min(1,'Name your goal.').max(160),kind:z.enum(['goal','habit']),target:z.number().int().min(1).max(365)}).strict().refine(v=>v.kind!=='habit'||v.target<=7,'A weekly habit target must be between 1 and 7 days.');
+export const letterSchema=z.object({title:z.string().trim().min(1,'Add a subject.').max(160),body:z.string().trim().min(1,'Write a little letter.').max(20000),unlockDate:dateSchema}).strict();
+export const songSchema=z.object({title:z.string().trim().min(1,'Name the song.').max(160),artist:z.string().trim().min(1,'Add an artist.').max(160),date:dateSchema,note:z.string().max(1000),url:z.string().max(2048).refine(v=>{if(!v)return true;try{const u=new URL(v);return u.protocol==='https:'&&!u.username&&!u.password}catch{return false}},'Use an https music link, or leave it blank.')}).strict();
+export const profileSchema=z.object({name:z.string().trim().max(60),timeZone:z.string().refine(validZone,'Use an IANA time zone, such as Asia/Kolkata.'),weekStart:z.union([z.literal(0),z.literal(1)]),notebook:notebookSchema.optional()}).strict();
