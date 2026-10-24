@@ -1,7 +1,7 @@
 import type {NotebookPreferences,PageDesign} from './notebook';
 export type Mood = 'joyful'|'good'|'quiet'|'low'|'tough';
 export const MOODS: {id:Mood;label:string;face:string}[] = [{id:'joyful',label:'Joyful',face:'☀'},{id:'good',label:'Good',face:'◡'},{id:'quiet',label:'Quiet',face:'≈'},{id:'low',label:'Low',face:'☁'},{id:'tough',label:'Tough',face:'☂'}];
-export type Profile = {id:string;name:string;email:string;timeZone:string;weekStart:0|1;createdAt:string;notebook?:NotebookPreferences};
+export type Profile = {id:string;name:string;email:string;timeZone:string;weekStart:0|1;createdAt:string;notebook?:NotebookPreferences;hasPassword?:boolean;googleLinked?:boolean;googleEmail?:string};
 export type Entry = {date:string;title:string;body:string;mood:Mood|null;favorite:boolean;page?:PageDesign;version:number;updatedAt:string};
 export type Memory = {id:string;date:string;caption:string;alt:string;photoId:string;image?:string};
 export type Goal = {id:string;title:string;target:number;completed:number;kind:'goal'|'habit';checks:string[];createdAt:string};

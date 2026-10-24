@@ -4,9 +4,13 @@ import {join} from 'node:path';
 import {DEFAULT_NOTEBOOK,type NotebookPreferences} from '../shared/notebook';
 import type {Profile} from '../shared/types';
 
-type Account=Profile&{passwordHash:string;recoveryHash:string};
-type AccountRow={id:string;name:string;email:string;zone:string;week_start:number;created_at:string;password_hash:string;recovery_hash:string;notebook?:string};
-const account=(r:AccountRow):Account=>({id:r.id,name:r.name,email:r.email,timeZone:r.zone,weekStart:r.week_start as 0|1,createdAt:r.created_at,notebook:{...DEFAULT_NOTEBOOK,...JSON.parse(r.notebook||'{}')},passwordHash:r.password_hash,recoveryHash:r.recovery_hash});
+export const GOOGLE_ONLY_PASSWORD='!google-only';
+export type GoogleIdentity={subject:string;accountId:string;email:string;linkedAt:string};
+export type GoogleChallenge={hash:string;nonceHash:string;purpose:'login'|'signup'|'link'|'delete';accountId:string|null;sessionHash:string|null;expires:number;timeZone:string;name:string};
+export type Account=Profile&{passwordHash:string;recoveryHash:string};
+type AccountRow={id:string;name:string;email:string;zone:string;week_start:number;created_at:string;password_hash:string;recovery_hash:string;notebook?:string;google_subject?:string;google_email?:string};
+const account=(r:AccountRow):Account=>({id:r.id,name:r.name,email:r.email,timeZone:r.zone,weekStart:r.week_start as 0|1,createdAt:r.created_at,notebook:{...DEFAULT_NOTEBOOK,...JSON.parse(r.notebook||'{}')},passwordHash:r.password_hash,recoveryHash:r.recovery_hash,hasPassword:r.password_hash!==GOOGLE_ONLY_PASSWORD,googleLinked:!!r.google_subject,...(r.google_email?{googleEmail:r.google_email}:{})});
+const accountSelect='SELECT a.*,g.subject AS google_subject,g.email AS google_email FROM accounts a LEFT JOIN google_identities g ON g.account_id=a.id';
 /** One local SQLite connection. All private records go through owner-filtered database views.
  * The SQL authorizer refuses direct base-table access in user scope; write triggers reject owner changes.
  * Scope callbacks are synchronous, so request contexts cannot interleave on this connection. */
@@ -19,6 +23,9 @@ export class Store {
   this.#db.exec(`PRAGMA foreign_keys=ON; PRAGMA journal_mode=DELETE; PRAGMA secure_delete=ON; PRAGMA busy_timeout=5000;
    CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,password_hash TEXT NOT NULL,recovery_hash TEXT NOT NULL,zone TEXT NOT NULL,week_start INTEGER NOT NULL CHECK(week_start IN(0,1)),created_at TEXT NOT NULL);
    CREATE TABLE IF NOT EXISTS sessions(hash TEXT PRIMARY KEY,account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,expires INTEGER NOT NULL);
+   CREATE TABLE IF NOT EXISTS google_identities(subject TEXT PRIMARY KEY CHECK(length(subject) BETWEEN 1 AND 255),account_id TEXT NOT NULL UNIQUE REFERENCES accounts(id) ON DELETE CASCADE,email TEXT NOT NULL,linked_at TEXT NOT NULL);
+   CREATE TABLE IF NOT EXISTS google_challenges(hash TEXT PRIMARY KEY,nonce_hash TEXT NOT NULL,purpose TEXT NOT NULL CHECK(purpose IN('login','signup','link','delete')),account_id TEXT REFERENCES accounts(id) ON DELETE CASCADE,session_hash TEXT,expires INTEGER NOT NULL,zone TEXT NOT NULL,name TEXT NOT NULL);
+
    CREATE TABLE IF NOT EXISTS records(owner_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,kind TEXT NOT NULL CHECK(kind IN('entry','memory','goal','letter','song')),id TEXT NOT NULL,value TEXT NOT NULL CHECK(json_valid(value)),PRIMARY KEY(owner_id,kind,id));
    CREATE TABLE IF NOT EXISTS photos(owner_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,id TEXT NOT NULL,data BLOB NOT NULL,PRIMARY KEY(owner_id,id));
    CREATE VIEW IF NOT EXISTS owned_records AS SELECT * FROM records WHERE owner_id=current_owner();
@@ -60,10 +67,10 @@ export class Store {
   });
   this.#db.prepare('DELETE FROM sessions WHERE expires<?').run(Date.now());
  }
- byEmail(email:string):Account|null{const r=this.#db.prepare('SELECT * FROM accounts WHERE email=?').get(email) as AccountRow|undefined;return r?account(r):null;}
- byId(id:string):Account|null{const r=this.#db.prepare('SELECT * FROM accounts WHERE id=?').get(id) as AccountRow|undefined;return r?account(r):null;}
+ byEmail(email:string):Account|null{const r=this.#db.prepare(accountSelect+' WHERE a.email=?').get(email) as AccountRow|undefined;return r?account(r):null;}
+ byId(id:string):Account|null{const r=this.#db.prepare(accountSelect+' WHERE a.id=?').get(id) as AccountRow|undefined;return r?account(r):null;}
  create(a:Account){this.#db.prepare('INSERT INTO accounts(id,email,name,password_hash,recovery_hash,zone,week_start,created_at) VALUES(?,?,?,?,?,?,?,?)').run(a.id,a.email,a.name,a.passwordHash,a.recoveryHash,a.timeZone,a.weekStart,a.createdAt);}
- session(hash:string,now:number):Account|null{this.#db.prepare('DELETE FROM sessions WHERE expires<=?').run(now);const r=this.#db.prepare('SELECT a.* FROM accounts a JOIN sessions s ON s.account_id=a.id WHERE s.hash=? AND s.expires>?').get(hash,now) as AccountRow|undefined;return r?account(r):null;}
+ session(hash:string,now:number):Account|null{this.#db.prepare('DELETE FROM sessions WHERE expires<=?').run(now);const r=this.#db.prepare(accountSelect+' JOIN sessions s ON s.account_id=a.id WHERE s.hash=? AND s.expires>?').get(hash,now) as AccountRow|undefined;return r?account(r):null;}
  addSession(hash:string,id:string,expires:number){this.#db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(hash,id,expires);}
  removeSession(hash:string){this.#db.prepare('DELETE FROM sessions WHERE hash=?').run(hash);}
  revokeSessions(id:string){this.#db.prepare('DELETE FROM sessions WHERE account_id=?').run(id);}
@@ -75,6 +82,14 @@ export class Store {
   this.#owner=owner;
   this.#db.exec('BEGIN IMMEDIATE');try{const result=operation(new Scope(this.#db,owner));this.#db.exec('COMMIT');return result}catch(error){if(this.#db.isTransaction)this.#db.exec('ROLLBACK');throw error}finally{this.#owner=null;}
  }
+ googleForAccount(id:string):GoogleIdentity|null{const row=this.#db.prepare('SELECT subject,account_id,email,linked_at FROM google_identities WHERE account_id=?').get(id) as {subject:string;account_id:string;email:string;linked_at:string}|undefined;return row?{subject:row.subject,accountId:row.account_id,email:row.email,linkedAt:row.linked_at}:null;}
+ googleBySubject(subject:string):Account|null{const row=this.#db.prepare(accountSelect+' WHERE g.subject=?').get(subject) as AccountRow|undefined;return row?account(row):null;}
+ createGoogleAccount(value:Account,subject:string,email:string,at:string){this.#db.exec('BEGIN IMMEDIATE');try{this.create(value);this.#db.prepare('INSERT INTO google_identities(subject,account_id,email,linked_at) VALUES(?,?,?,?)').run(subject,value.id,email,at);this.#db.exec('COMMIT');return this.byId(value.id)!}catch(error){if(this.#db.isTransaction)this.#db.exec('ROLLBACK');throw error}}
+ linkGoogle(id:string,subject:string,email:string,at:string){this.#db.prepare('INSERT INTO google_identities(subject,account_id,email,linked_at) VALUES(?,?,?,?)').run(subject,id,email,at);return this.byId(id)!;}
+ unlinkGoogle(id:string){this.#db.prepare('DELETE FROM google_identities WHERE account_id=?').run(id);return this.byId(id)!;}
+ updateGoogleEmail(subject:string,email:string){this.#db.prepare('UPDATE google_identities SET email=? WHERE subject=?').run(email,subject);}
+ putGoogleChallenge(value:GoogleChallenge,now:number){this.#db.prepare('DELETE FROM google_challenges WHERE expires<=?').run(now);this.#db.prepare('INSERT INTO google_challenges(hash,nonce_hash,purpose,account_id,session_hash,expires,zone,name) VALUES(?,?,?,?,?,?,?,?)').run(value.hash,value.nonceHash,value.purpose,value.accountId,value.sessionHash,value.expires,value.timeZone,value.name);}
+ takeGoogleChallenge(hash:string,now:number):GoogleChallenge|null{const row=this.#db.prepare('DELETE FROM google_challenges WHERE hash=? RETURNING *').get(hash) as {hash:string;nonce_hash:string;purpose:GoogleChallenge['purpose'];account_id:string|null;session_hash:string|null;expires:number;zone:string;name:string}|undefined;return row&&row.expires>now?{hash:row.hash,nonceHash:row.nonce_hash,purpose:row.purpose,accountId:row.account_id,sessionHash:row.session_hash,expires:row.expires,timeZone:row.zone,name:row.name}:null;}
  close(){this.#db.close();}
 }
 export class Scope {

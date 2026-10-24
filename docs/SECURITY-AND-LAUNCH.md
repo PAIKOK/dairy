@@ -20,9 +20,13 @@ This is a **local development edition**, not a production deployment or verified
 - Recovery/password changes invalidate old codes and sessions, with a transactional expected-hash check against concurrent changes.
 - Account export excludes password, recovery and session hashes. Export intentionally includes sealed letter bodies and photo data.
 - Account deletion requires current credentials, cascades live content/session deletion, and enables SQLite secure_delete. Storage-level copies and backups cannot be guaranteed erased by application code.
-- No analytics, ads, social SDKs, remote font requests, embedded music players, or automatic diary-to-AI processing.
+- No analytics, ads, embedded music players, or automatic diary-to-AI processing. App fonts remain self-hosted. Optional Google Identity Services loads only after choosing Google; Google may load its own identity UI resources under its policies.
+- Google identity is verified server-side with the official library, then checked for issuer, audience, expiry, verified email and a single-use nonce bound to an HttpOnly cookie. Stable subject IDs map to accounts; identities are unique and cascade with deletion. Linking requires the current password and a bound app session, not just a matching email. Google-only deletion requires DELETE and the correct linked identity.
+- Google ID/access/refresh tokens are not persisted or logged. Only subject/email linkage and short-lived hashed nonce records are stored. The supplied public client ID is local configuration; unrelated pasted credentials were not saved.
 
 ## Important limitations / human review
+
+- Real Google sign-in on the intended network, client ownership/type, origins, OAuth app audience/testing status, branding/privacy domains, provider terms, and public publishing requirements need human verification. Automated Google flows use mocks. App logout does not sign out of the user’s Google browser account. Public deployment must add HTTPS and Secure cookies; this change does not make the local-only build publicly deployable.
 
 - Content is readable to the machine's administrator. There is **no end-to-end encryption**, encrypted backups, or managed backup/recovery infrastructure.
 - The loopback-only HTTP build uses a non-Secure session cookie. Before any public use, add HTTPS, Secure cookies, front-end security headers/CSP, a verified reverse-proxy model, hardened operational configuration, and abuse monitoring. Do not simply remove the loopback guard.

@@ -18,7 +18,7 @@ Frontend: `http://127.0.0.1:5177` · API: `http://127.0.0.1:4017`.
 
 - `/` — public homepage with interactive calendar/diary preview
 - `/demo` — clearly labeled sample diary; changes are in memory and reset on reload
-- `/signup`, `/login`, `/recover` — local account access and recovery-code flow
+- `/signup`, `/login`, `/recover` — email/password or optional Google account access, plus saved recovery-code flow
 - `/diary` — personal writing desk and openable 3D diary cover
 - `/diary/calendar`, `/diary/day/2027-01-01` — real calendars and daily editor
 - `/diary/bookmarks`, `/diary/trackers` — kept-close pages and real-data graph-paper trackers
@@ -53,6 +53,16 @@ Cover choices, stickers, notes, paper/ink/font choices and freehand geometry per
 
 Limits: 30 stickers and 30 ink strokes per daily page, with bounded stroke coordinates/point counts. Failed saves retain the page state in the open tab.
 
+## Optional Google login and sign-up
+
+Google access is implemented alongside email/password login. The Google SDK loads only when the user chooses Google; there is no automatic One Tap prompt. Signup requires the age/terms checkbox and shows a saved recovery-code handoff. Existing password accounts must sign in and confirm their diary password in Settings before linking Google; matching emails never silently merge accounts.
+
+Only a public Google Web application client ID is required: set `GOOGLE_CLIENT_ID` server-side in the ignored `.env` file and authorize the local/live origins in Google Cloud. No Google client secret or Drive/Sheets/Gmail permission is used. The supplied public client ID is configured on this laptop only; it is not in Git. The test account chooser and verifier are mocked in automated tests. **Real sign-in with the supplied Google client is not tested yet**, at the user’s request; it must be checked on the other network after the client’s origins/audience are configured.
+
+Google-only accounts can delete their diary after typing DELETE and reauthenticating with the linked Google account. Their saved recovery code can add a diary password. Password-equipped accounts can unlink Google after password confirmation; the only login method cannot be removed.
+
+See `docs/GOOGLE-SIGN-IN.md` for the exact console steps, local configuration, network-error handling, and real-account test checklist. Contact webhooks, Google Sheets, MongoDB and Groq are not enabled by this feature. Previously exposed database/webhook secrets were not copied into this project and must be rotated separately.
+
 ## Local storage and recovery
 
 Real accounts persist in `server/data/little-life.sqlite`, **not localStorage**. The data directory is mode 0700 and the database 0600. Private data is owner-filtered in server repository access and database views, with SQL authorization and write checks. This is not end-to-end encryption: a computer operator or device backup can access the file.
@@ -83,6 +93,7 @@ No AI provider is active by default. Curated writing prompts work without extern
 npm run check           # TypeScript for client/server/tests, then production frontend build
 npm test                # date, autosave, privacy, API, recovery, export/deletion and persistence tests
 npm run test:browser    # with npm run dev running: Chrome journeys, screenshots and axe checks
+node --import tsx scripts/google-browser-test.mjs # mocked Google signup/login/link/unlink/deletion and responsive checks
 node scripts/eraser-test.mjs # whole-stroke erasing, undo/redo, real persistence, keyboard/touch, narrow layouts
 node scripts/notebook-interactions-test.mjs # drag-to-turn, failed saves, closing, photo covers, mobile touch
 node scripts/diary-home-test.mjs # logos open the homepage; Back/Close keep the diary desk; save/error guards

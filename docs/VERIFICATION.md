@@ -1,5 +1,12 @@
 # Verification record — October 24, 2026
 
+## Google authentication additions
+
+- `npm test`: 11 new Google-auth tests passed, including optional configuration, verified signup, age/terms, one-time nonce/cookie binding, replay/expiry/cross-origin rejection, invalid claims, stable-subject ownership, no email auto-merge, password-confirmed linking/unlinking, recovery and Google-only deletion. A locally generated RSA key/token fixture exercises the production Google verifier with the certificate-fetch method mocked; no real provider network is used.
+- `node --import tsx scripts/google-browser-test.mjs`: 9 journey groups and 7 selected axe/overflow scans passed at desktop/375/320px. Signup/login, actual local persistence, password fallback, linking, unlinking, wrong-account deletion rejection, correct Google-only deletion, consent and blocked SDK loading were exercised with a deliberately mocked Google button/credential verifier.
+- Final `npm run check`, `npm test` (39 passed), `npm run build`, the 9 mocked Google journeys/7 scans, and the existing 18-group/48-view browser suite were rerun after the Google changes and passed. The existing suite observed no automatic external requests.
+- Real Google credentials, the actual Google account chooser/FedCM behavior, the supplied Cloud OAuth client, authorized origins/audience, and other-network sign-in are not verified. No company network restriction was bypassed.
+
 ## Final results
 
 - `npm run build` — passed separately, as well as through the check command.
@@ -8,7 +15,7 @@
 - `node scripts/diary-home-test.mjs` — 41 checks passed: 30 tab-return journeys, 3 Close book checks, 6 top/menu-logo homepage checks at 1440/375/320px, and 2 private-account save-before-navigation/failure-retention checks. No runtime errors; test account deletion returned 200.
 
 - `npm run check` — passed: TypeScript client/server/shared/tests and Vite production build.
-- `npm test` — 28 passed, 0 failed, 0 skipped.
+- `npm test` — 39 passed, 0 failed, 0 skipped (including 11 Google-auth tests).
 - `npm run test:browser` — final serial rerun passed 18 journey groups and 48 page/viewport inspections. An earlier retry timed out at signup; the test now asserts the actual signup HTTP result and marks a created account for cleanup before the UI wait. No production auth limits or checks were bypassed.
 - `node scripts/notebook-test.mjs` — 10 real-account notebook journey groups passed.
 - `node scripts/notebook-review.mjs` — 28 layout/selected axe checks at 1440/768/375/320px, including cover upload/removal dialogs and the stationery drawer.
