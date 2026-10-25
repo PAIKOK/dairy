@@ -1,6 +1,6 @@
 # Google login and sign-up — setup and testing
 
-This is optional Google Identity Services authentication for A Little Life. Email/password login remains available. It does not connect MongoDB, Groq, Google Sheets, email forwarding, Google Drive, or contact enquiries.
+This is optional Google Identity Services authentication for A Little Life. Email/password login remains available. It does not enable Groq, Google Sheets, email forwarding, Google Drive, or contact enquiries.
 
 ## 1. Configure a Web application client in Google Cloud
 
@@ -29,7 +29,7 @@ In `/Users/jks1/Desktop/dairy/.env`, keep only appropriate local configuration a
 GOOGLE_CLIENT_ID=YOUR_WEB_APPLICATION_CLIENT_ID.apps.googleusercontent.com
 ```
 
-The actual public ID is already present in the ignored local file for the supplied client. Never put a database password, webhook secret or private API key in frontend source. Do not paste secrets into chat. The Atlas/webhook values previously exposed in chat must be rotated separately; they are not used by this feature.
+The public ID is present in the ignored local file and in Vercel Production/Preview server settings. MongoDB persistence is configured separately. Never put a database password, webhook secret or private API key in frontend source. Do not paste secrets into chat. The Atlas/webhook values previously exposed in chat must be rotated separately; they are not used by this feature.
 
 Restart `npm run dev` after changing environment settings. Open `http://localhost:5177/login` or `/signup`. Do not start a second development server on the same ports.
 
@@ -48,7 +48,7 @@ Google’s script is not loaded automatically. The first local Continue button r
 
 The server uses `google-auth-library` to verify the signed ID token, audience, issuer and expiry, and then checks the verified email and nonce. An HttpOnly, SameSite=Strict challenge cookie binds a single-use database record to this browser. Link/delete challenges are also bound to the authenticated diary session. Google’s stable subject ID, not a browser-supplied email, maps to a private app account.
 
-Only Google subject/email and ordinary account metadata are stored. No Google ID/access/refresh token is stored or logged. Linked identity metadata is included in the user’s private export and removed with the account. Google-only accounts have no usable password until they explicitly add one by recovery. This local build is not end-to-end encrypted or publicly deployment-hardened.
+Only Google subject/email and ordinary account metadata are stored. No Google ID/access/refresh token is stored or logged. Linked identity metadata is included in the user’s private export and removed with the account. Google-only accounts have no usable password until they explicitly add one by recovery. This preview is not end-to-end encrypted or independently security-audited. Hosted sessions require verified TLS, exact HTTPS origins and Secure cookies; their identity/session state persists in MongoDB.
 
 ## 5. What is and is not tested
 

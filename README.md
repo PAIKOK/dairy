@@ -6,13 +6,18 @@ Standalone project in `/Users/jks1/Desktop/dairy`. It does not use or modify the
 
 ## Open / run
 
-Requires **Node.js 24.10 or newer** (tested here with Node 26.3.1). SQLite is built into Node; no MongoDB credentials are required.
+Use **Node.js 24 LTS** (24.10+ for the optional SQLite test mode). Local verification also ran with Node 26.3.1; Vercel is explicitly configured for Node 24.
+
+MongoDB is the **primary** database. Configure `MONGODB_URI` in a private environment before starting; never put it in client source or a `VITE_` variable. The default database is `a_little_life_diary`.
 
 ```sh
 cd /Users/jks1/Desktop/dairy
-npm install --legacy-peer-deps  # only needed if node_modules is absent
+npm install --legacy-peer-deps  # only if dependencies are absent
+# Configure the private .env using .env.example, then:
 npm run dev
 ```
+
+For an offline developer fixture only, opt in explicitly with `STORAGE_BACKEND=sqlite npm run dev`. Existing local SQLite writing remains untouched and is not automatically uploaded or migrated. SQLite is refused for hosted accounts, even if MongoDB is unavailable.
 
 Frontend: `http://127.0.0.1:5177` · API: `http://127.0.0.1:4017`.
 
@@ -34,6 +39,16 @@ CLIENT_PORT=5178 API_PORT=4018 npm run dev
 
 The frontend and API must be on this computer. Public binding is deliberately refused by the local server entrypoint.
 
+## Vercel deployment
+
+`api/index.ts` runs the existing Express API with a pooled MongoDB connection. `vercel.json` routes `/api/*` to this function and routes diary/demo/auth/policy deep links to the Vite frontend. API requests never receive an HTML fallback.
+
+The existing Vercel project already contains `MONGODB_URI`, `GOOGLE_CLIENT_ID` and an unrelated Groq key for Production and Preview. Their values were not printed or committed. The dedicated `MONGODB_DB`, exact `CLIENT_ORIGIN`, and generated private `RATE_LIMIT_SECRET` were added without changing those existing credentials. Groq remains disconnected.
+
+Hosted requests require MongoDB, verified TLS, HTTPS origins and Secure cookies. A missing/unreachable database returns an error; there is no temporary-file or in-memory account fallback. The supplied site had no API before this change. Publishing source is not itself proof that Atlas networking, permissions, and a real Google login work; check `/api/status` after the new deployment reports Ready.
+
+See `docs/VERCEL-DEPLOYMENT.md` for deployment setup, collection mapping, failure modes and verification boundaries.
+
 ## The summer notebook
 
 The whole site uses warm, physical stationery surfaces: summer cream, honey, sage and soft rose. Covers, page stacks, photo prints, envelopes, record sleeves and paper planners have native CSS/SVG depth rather than a new 3D framework.
@@ -49,7 +64,7 @@ The whole site uses warm, physical stationery surfaces: summer cream, honey, sag
 - Read graph-paper mood, saved-word-count and habit trackers. Missing moods stay blank; data tables provide an accessible alternative to the graphs.
 - On narrow screens, switch between the writing page and reflection page. Flat view and reduced-motion support remain available.
 
-Cover choices, stickers, notes, paper/ink/font choices and freehand geometry persist in the local account and are included in exports. The old SQLite account/entry schema is upgraded without deleting existing writing; this migration is tested. No pressure/timing telemetry, external font requests, or AI processing of drawings is added.
+Cover choices, stickers, notes, paper/ink/font choices and freehand geometry persist in the account and are included in exports. The old SQLite account/entry schema is upgraded without deleting existing writing; this migration is tested. No pressure/timing telemetry, external font requests, or AI processing of drawings is added.
 
 Limits: 30 stickers and 30 ink strokes per daily page, with bounded stroke coordinates/point counts. Failed saves retain the page state in the open tab.
 
@@ -57,21 +72,34 @@ Limits: 30 stickers and 30 ink strokes per daily page, with bounded stroke coord
 
 Google access is implemented alongside email/password login. The Google SDK loads only when the user chooses Google; there is no automatic One Tap prompt. Signup requires the age/terms checkbox and shows a saved recovery-code handoff. Existing password accounts must sign in and confirm their diary password in Settings before linking Google; matching emails never silently merge accounts.
 
-Only a public Google Web application client ID is required: set `GOOGLE_CLIENT_ID` server-side in the ignored `.env` file and authorize the local/live origins in Google Cloud. No Google client secret or Drive/Sheets/Gmail permission is used. The supplied public client ID is configured on this laptop only; it is not in Git. The test account chooser and verifier are mocked in automated tests. **Real sign-in with the supplied Google client is not tested yet**, at the user’s request; it must be checked on the other network after the client’s origins/audience are configured.
+Only a public Google Web application client ID is required: set `GOOGLE_CLIENT_ID` server-side in the ignored `.env` file and authorize the local/live origins in Google Cloud. No Google client secret or Drive/Sheets/Gmail permission is used. The public client ID is configured in private server settings, including Vercel; it is not embedded in Git. The test account chooser and verifier are mocked in automated tests. **Real sign-in with the supplied Google client is not tested yet**, at the user’s request; it must be checked on the other network after the client’s origins/audience are configured.
 
 Google-only accounts can delete their diary after typing DELETE and reauthenticating with the linked Google account. Their saved recovery code can add a diary password. Password-equipped accounts can unlink Google after password confirmation; the only login method cannot be removed.
 
-See `docs/GOOGLE-SIGN-IN.md` for the exact console steps, local configuration, network-error handling, and real-account test checklist. Contact webhooks, Google Sheets, MongoDB and Groq are not enabled by this feature. Previously exposed database/webhook secrets were not copied into this project and must be rotated separately.
+See `docs/GOOGLE-SIGN-IN.md` for the exact console steps, local configuration, network-error handling, and real-account test checklist. Contact webhooks, Google Sheets and Groq are not enabled by Google sign-in. MongoDB persistence is implemented separately. Previously exposed database/webhook secrets were not copied into this project and must be rotated separately.
 
-## Local storage and recovery
+## Saved data and recovery
 
-Real accounts persist in `server/data/little-life.sqlite`, **not localStorage**. The data directory is mode 0700 and the database 0600. Private data is owner-filtered in server repository access and database views, with SQL authorization and write checks. This is not end-to-end encryption: a computer operator or device backup can access the file.
+All saved user content uses MongoDB for hosted accounts:
 
-**Save the recovery code shown after sign-up.** Email reset is not configured. Password changes and recovery replace the old recovery code and revoke old sessions. If you lose both the password and the saved code, there is no automated recovery for this edition.
+| Collection | Saved data |
+|---|---|
+| `accounts` | Email, optional nickname, credential hashes, timezone/week start, notebook/cover preferences |
+| `entries` | Daily writing, moods, bookmarks, paper/ink/font, sticky notes, stickers and doodles |
+| `photos`, `memories` | Private JPEG bytes, photo captions/alt text/dates, cover photographs |
+| `goals` | Goal milestones, habits and dated check-ins |
+| `letters` | Future letters, opening dates and their original time zones |
+| `songs` | Soundtrack links, artists, dates and memory notes |
+| `sessions`, `google_identities`, `google_challenges` | Server-side sign-in state and Google linkage; no plaintext tokens |
+| `rate_limits` | Short-lived keyed counters; no raw IP address |
 
-Settings exports JSON containing the account, entries, goals/habits, song links, **sealed letters**, and photo data. Keep exports private. Account deletion requires the password and the word DELETE; it erases live database content, not existing exports or filesystem snapshots.
+Calendars, trackers, bookmarks, constellations and year reviews read this saved data; they do not create separate competing stores. Demo changes remain in memory, clearly labeled. Unsaved drafts remain in their open tab. AI prompt text is not newly retained or sent automatically; only suggestions explicitly inserted and saved into an entry become diary data.
 
-Photos are normalized in the browser, validated on the server, and served only through authenticated endpoints. Per-account photo storage is limited to 20 MB.
+Private queries include the authenticated owner. MongoDB validators tie immutable document IDs to their owners; unique indexes, transactions and account-scoped write coordination prevent owner reassignment and conflicting/quota-breaking writes. This is not end-to-end encryption or a claim of native MongoDB row-level-security roles. Service/database administrators can access stored content.
+
+**Save the recovery code shown after signup.** Password changes/recovery replace the old code and revoke old sessions. Email recovery is not configured. Settings exports owned content, photos and **sealed letters**, never password/recovery/session hashes. Deletion removes live owned records, not prior exports or hosting backups. Photos are limited to 20 MB per account.
+
+The optional local SQLite mode retains its existing private file permissions, scoped views and write checks. Existing local accounts are not silently merged into cloud accounts; migration requires a separate, reviewed step.
 
 ## Autosave and dates
 
@@ -79,19 +107,16 @@ Autosave is serialized per day and runs after a 600 ms typing pause; Save now fl
 
 Dates are `YYYY-MM-DD` values. Calendar arithmetic is independent of timestamps; Today and habit check-ins use the profile's IANA time zone. Week starts are configurable. Year navigation supports 1900–2200, including leap years. Letters keep the time zone chosen when written and unlock on the server at midnight on their selected day. They are not emailed, and their seal is an app feature, not time-lock encryption.
 
-## Optional AI and MongoDB
+## Optional AI
 
-No AI provider is active by default. Curated writing prompts work without external processing. To configure the optional Gemini REST path after a privacy/provider review, copy `.env.example` to `.env` and set `GEMINI_API_KEY` and `GEMINI_MODEL` server-side. Only pasted text is sent after per-request consent. A real provider call has **not** been tested in this build.
-
-**MongoDB and Groq are not connected.** Cloud connection tests are deferred; the shared credentials have not been copied into project files or used for requests. Groq has no adapter in this build.
-
-**MongoDB is not connected.** Do not put a real URI in this build expecting it to migrate data. The entrypoint explicitly refuses a nonempty MONGODB_URI rather than silently using another database. A separately tested MongoDB adapter and migration are still required. Never paste database passwords into chat or commit `.env`.
+Curated writing prompts work without an external provider. The existing Gemini REST path is disabled unless `GEMINI_API_KEY` and `GEMINI_MODEL` are configured server-side. Text is sent only after per-request consent. A real AI call has not been tested. Groq has no adapter in this change; its existing Vercel key was left untouched.
 
 ## Checks
 
 ```sh
 npm run check           # TypeScript for client/server/tests, then production frontend build
 npm test                # date, autosave, privacy, API, recovery, export/deletion and persistence tests
+npm run test:browser:mongo # isolated MongoDB + full Chrome journeys, then cleanup
 npm run test:browser    # with npm run dev running: Chrome journeys, screenshots and axe checks
 node --import tsx scripts/google-browser-test.mjs # mocked Google signup/login/link/unlink/deletion and responsive checks
 node scripts/eraser-test.mjs # whole-stroke erasing, undo/redo, real persistence, keyboard/touch, narrow layouts
@@ -112,7 +137,8 @@ See `PROGRESS.md` for the current verification state and `docs/SECURITY-AND-LAUN
 - `client/Landing.tsx`, `styles.css`, `icons.tsx` — editorial identity and native illustrations
 - `client/Workspace.tsx`, `EntryQueue.ts` — private/demo state, navigation protection, autosave
 - `client/DiaryPages.tsx`, `CollectionPages.tsx`, `SettingsPages.tsx` — purpose-specific product flows
-- `server/app.ts`, `store.ts`, `photos.ts`, `password.ts` — local API and storage/security boundaries
+- `api/index.ts`, `server/bootstrap.ts`, `mongo-store.ts`, `storage.ts` — Vercel entry, MongoDB-first persistence and async storage contract
+- `server/app.ts`, `store.ts`, `photos.ts`, `password.ts` — shared API, opt-in local store and security boundaries
 - `shared/` — shared date logic, data types, validated input contracts
 
 The app uses React, React Router, Express, Zod, and Vite. Fonts and sample images are self-hosted; see `docs/ASSETS.md` for provenance and font licenses.

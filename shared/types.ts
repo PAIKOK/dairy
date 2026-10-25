@@ -7,5 +7,5 @@ export type Memory = {id:string;date:string;caption:string;alt:string;photoId:st
 export type Goal = {id:string;title:string;target:number;completed:number;kind:'goal'|'habit';checks:string[];createdAt:string};
 export type Letter = {id:string;title:string;unlockDate:string;timeZone:string;createdAt:string;unlocked:boolean;body?:string};
 export type Song = {id:string;title:string;artist:string;url:string;date:string;note:string};
-export type Book = {profile:Profile;entries:Entry[];memories:Memory[];goals:Goal[];letters:Letter[];songs:Song[];aiEnabled:boolean};
+export type Book = {storage?:'mongodb'|'local-sqlite';profile:Profile;entries:Entry[];memories:Memory[];goals:Goal[];letters:Letter[];songs:Song[];aiEnabled:boolean};
 export type EntryInput = Pick<Entry,'date'|'title'|'body'|'mood'|'favorite'|'page'|'version'>;

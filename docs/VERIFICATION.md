@@ -81,3 +81,12 @@ The API suite uses disposable temporary SQLite databases and removes them. The b
 MongoDB or Groq connection tests (explicitly deferred), a real AI-provider call, MongoDB integration/migration, email verification or email delivery, public deployment, managed backups, multi-instance scale, other browser engines, physical mobile devices, or a manual screen-reader/security/legal audit. Automated accessibility checks are not a complete accessibility-compliance determination.
 
 See SECURITY-AND-LAUNCH.md for required human review before public availability.
+
+## October 25 — MongoDB-first hosting integration
+
+- `npm run check`: passed after the storage/API changes.
+- `npm test`: 69 passed, 0 failed, including real disposable MongoDB replica-set transactions, cross-client persistence, every saved page type, owner validation, photos/quotas, shared rate counters, Secure cookies, stale-session protection, export/recovery/deletion and legacy SQLite regressions.
+- `npm run test:browser:mongo`: final rerun passed 18 journey groups and 48 selected accessibility/overflow scans. The first run reached all features but found an ambiguous test selector at final deletion; scoping it to the confirmation dialog fixed the harness. The final run deleted the disposable account normally.
+- Mocked Google/settings Chrome tests: 17 groups and 10 selected scans passed, with no runtime errors or unexpected requests. This is not a real Google account-chooser test.
+- npm audit after patching the reported Vite/Zod/body-parser issues: zero vulnerabilities.
+- Vercel variable names were verified; secrets were not printed/committed. Real Atlas connectivity was not tested locally because the sensitive Vercel URI cannot be downloaded. Check the Git-triggered deployed runtime separately.

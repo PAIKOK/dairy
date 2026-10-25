@@ -1,9 +1,8 @@
-import {resolve,sep} from 'node:path';
-import {createApp} from './app';
+import {createConfiguredApp} from './bootstrap';
 const host=process.env.HOST||'127.0.0.1',port=Number(process.env.PORT||4017);
-if(!['127.0.0.1','localhost','::1'].includes(host))throw new Error('This local edition only binds to loopback. Review deployment security before enabling public hosting.');
-if(process.env.MONGODB_URI?.trim())throw new Error('MongoDB is not connected in this local build. Unset MONGODB_URI to use SQLite; credentials are never printed.');
-const directory=resolve(process.env.DATA_DIR||'server/data');if(['public','dist','client','shared','node_modules','.cache'].some(part=>{const root=resolve(part).toLowerCase(),target=directory.toLowerCase();return target===root||target.startsWith(root+sep)}))throw new Error('The private database directory must not be inside web assets or client source.');
-const {app,store}=createApp({directory,origin:process.env.CLIENT_ORIGIN||'http://127.0.0.1:5177,http://localhost:5177',apiKey:process.env.GEMINI_API_KEY,aiModel:process.env.GEMINI_MODEL,googleClientId:process.env.GOOGLE_CLIENT_ID});
-const server=app.listen(port,host,()=>console.log(`A Little Life API: http://${host}:${port} · private local SQLite storage`));
-for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>server.close(()=>{store.close();process.exit(0)}));
+if(!['127.0.0.1','localhost','::1'].includes(host))throw new Error('This development entry point only binds to loopback. Use the Vercel API entry point for hosted access.');
+let configured:Awaited<ReturnType<typeof createConfiguredApp>>;
+try{configured=await createConfiguredApp()}catch{console.error('The diary API could not initialize. Check the server-only database, trusted origin, TLS and rate-limit configuration. No database URI or credentials are logged.');process.exit(1)}
+const server=configured.app.listen(port,host,()=>console.log(`A Little Life API: http://${host}:${port} · ${configured.storage==='mongodb'?'private MongoDB storage':'private local SQLite storage'}`));
+server.on('error',()=>{console.error('The diary API could not bind its local port.');void configured.close().finally(()=>{process.exitCode=1})});
+for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>server.close(()=>void configured.close().finally(()=>process.exit(0))));

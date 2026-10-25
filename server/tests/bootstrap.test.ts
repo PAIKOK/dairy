@@ -1,0 +1,10 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {hostedConfiguration} from '../bootstrap';
+import {MongoStore} from '../mongo-store';
+const cloud={VERCEL:'1',CLIENT_ORIGIN:'https://diary.example',MONGODB_URI:'mongodb+srv://not-a-real-fixture.example/',RATE_LIMIT_SECRET:'a-server-only-test-secret-with-32-characters'};
+test('MongoDB is primary and missing URI never silently falls back to SQLite',()=>{assert.throws(()=>hostedConfiguration({}),/MONGODB_URI/);assert.equal(hostedConfiguration({...cloud}).backend,'mongodb');assert.equal(hostedConfiguration({...cloud}).database,'a_little_life_diary')});
+test('SQLite requires explicit local opt-in and cannot be selected for hosted accounts',()=>{assert.equal(hostedConfiguration({STORAGE_BACKEND:'sqlite'}).backend,'sqlite');assert.throws(()=>hostedConfiguration({...cloud,STORAGE_BACKEND:'sqlite'}),/require MongoDB/)});
+test('hosted configuration requires exact HTTPS origins and a private rate-limit secret',()=>{assert.throws(()=>hostedConfiguration({...cloud,CLIENT_ORIGIN:'http://diary.example'}),/HTTPS/);assert.throws(()=>hostedConfiguration({...cloud,RATE_LIMIT_SECRET:''}),/RATE_LIMIT_SECRET/);assert.throws(()=>hostedConfiguration({...cloud,CLIENT_ORIGIN:'https://diary.example/path'}),/origins/)});
+test('only the platform-provided preview origin is added for preview deployments',()=>{assert.equal(hostedConfiguration({...cloud,VERCEL_ENV:'preview',VERCEL_URL:'diary-preview.vercel.app'}).origin,'https://diary.example,https://diary-preview.vercel.app');assert.equal(hostedConfiguration({...cloud,VERCEL_ENV:'production',VERCEL_URL:'ignored.vercel.app'}).origin,'https://diary.example')});
+test('insecure TLS options and administrative database names are refused before connecting',async()=>{await assert.rejects(MongoStore.connect('mongodb://fixture.example/?tls=false','diary',{requireTls:true}),/verified TLS/);await assert.rejects(MongoStore.connect('mongodb://fixture.example/','admin'),/dedicated application database/)});

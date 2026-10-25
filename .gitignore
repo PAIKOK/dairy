@@ -5,6 +5,7 @@ server/data/
 .env
 .env.*
 !.env.example
+.vercel/
 artifacts/
 *.log
 .DS_Store

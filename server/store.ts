@@ -1,4 +1,5 @@
-import {DatabaseSync,constants} from 'node:sqlite';
+import type {DatabaseSync as SQLiteDatabase} from 'node:sqlite';
+import {createRequire} from 'node:module';
 import {mkdirSync,chmodSync} from 'node:fs';
 import {join} from 'node:path';
 import {DEFAULT_NOTEBOOK,type NotebookPreferences} from '../shared/notebook';
@@ -7,16 +8,17 @@ import type {Profile} from '../shared/types';
 export const GOOGLE_ONLY_PASSWORD='!google-only';
 export type GoogleIdentity={subject:string;accountId:string;email:string;linkedAt:string};
 export type GoogleChallenge={hash:string;nonceHash:string;purpose:'login'|'signup'|'link'|'delete';accountId:string|null;sessionHash:string|null;expires:number;timeZone:string;name:string};
-export type Account=Profile&{passwordHash:string;recoveryHash:string};
-type AccountRow={id:string;name:string;email:string;zone:string;week_start:number;created_at:string;password_hash:string;recovery_hash:string;notebook?:string;google_subject?:string;google_email?:string};
-const account=(r:AccountRow):Account=>({id:r.id,name:r.name,email:r.email,timeZone:r.zone,weekStart:r.week_start as 0|1,createdAt:r.created_at,notebook:{...DEFAULT_NOTEBOOK,...JSON.parse(r.notebook||'{}')},passwordHash:r.password_hash,recoveryHash:r.recovery_hash,hasPassword:r.password_hash!==GOOGLE_ONLY_PASSWORD,googleLinked:!!r.google_subject,...(r.google_email?{googleEmail:r.google_email}:{})});
+export type Account=Profile&{passwordHash:string;recoveryHash:string;credentialVersion?:number};
+type AccountRow={id:string;name:string;email:string;zone:string;week_start:number;created_at:string;password_hash:string;recovery_hash:string;notebook?:string;google_subject?:string;google_email?:string;auth_version?:number};
+const account=(r:AccountRow):Account=>({id:r.id,name:r.name,email:r.email,timeZone:r.zone,weekStart:r.week_start as 0|1,createdAt:r.created_at,notebook:{...DEFAULT_NOTEBOOK,...JSON.parse(r.notebook||'{}')},passwordHash:r.password_hash,recoveryHash:r.recovery_hash,credentialVersion:r.auth_version||0,hasPassword:r.password_hash!==GOOGLE_ONLY_PASSWORD,googleLinked:!!r.google_subject,...(r.google_email?{googleEmail:r.google_email}:{})});
 const accountSelect='SELECT a.*,g.subject AS google_subject,g.email AS google_email FROM accounts a LEFT JOIN google_identities g ON g.account_id=a.id';
 /** One local SQLite connection. All private records go through owner-filtered database views.
  * The SQL authorizer refuses direct base-table access in user scope; write triggers reject owner changes.
  * Scope callbacks are synchronous, so request contexts cannot interleave on this connection. */
 export class Store {
- #db:DatabaseSync; #owner:string|null=null;
+ #db:SQLiteDatabase; #owner:string|null=null;
  constructor(directory:string){
+  const {DatabaseSync,constants}=createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
   mkdirSync(directory,{recursive:true,mode:0o700});chmodSync(directory,0o700);
   const path=join(directory,'little-life.sqlite');this.#db=new DatabaseSync(path);chmodSync(path,0o600);
   this.#db.function('current_owner',()=>this.#owner);
@@ -50,6 +52,9 @@ export class Store {
    END;`);
   const accountColumns=this.#db.prepare('PRAGMA table_info(accounts)').all() as {name:string}[];
   if(!accountColumns.some(c=>c.name==='notebook'))this.#db.exec("ALTER TABLE accounts ADD COLUMN notebook TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(notebook))");
+  if(!accountColumns.some(c=>c.name==='auth_version'))this.#db.exec('ALTER TABLE accounts ADD COLUMN auth_version INTEGER NOT NULL DEFAULT 0');
+  const sessionColumns=this.#db.prepare('PRAGMA table_info(sessions)').all() as {name:string}[];
+  if(!sessionColumns.some(c=>c.name==='auth_version'))this.#db.exec('ALTER TABLE sessions ADD COLUMN auth_version INTEGER NOT NULL DEFAULT 0');
   this.#db.exec(`
    CREATE TRIGGER IF NOT EXISTS owned_cover_photo_update BEFORE UPDATE OF notebook ON accounts
    WHEN json_extract(NEW.notebook,'$.coverPhotoId') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM photos WHERE owner_id=NEW.id AND id=json_extract(NEW.notebook,'$.coverPhotoId'))
@@ -70,10 +75,10 @@ export class Store {
  byEmail(email:string):Account|null{const r=this.#db.prepare(accountSelect+' WHERE a.email=?').get(email) as AccountRow|undefined;return r?account(r):null;}
  byId(id:string):Account|null{const r=this.#db.prepare(accountSelect+' WHERE a.id=?').get(id) as AccountRow|undefined;return r?account(r):null;}
  create(a:Account){this.#db.prepare('INSERT INTO accounts(id,email,name,password_hash,recovery_hash,zone,week_start,created_at) VALUES(?,?,?,?,?,?,?,?)').run(a.id,a.email,a.name,a.passwordHash,a.recoveryHash,a.timeZone,a.weekStart,a.createdAt);}
- session(hash:string,now:number):Account|null{this.#db.prepare('DELETE FROM sessions WHERE expires<=?').run(now);const r=this.#db.prepare(accountSelect+' JOIN sessions s ON s.account_id=a.id WHERE s.hash=? AND s.expires>?').get(hash,now) as AccountRow|undefined;return r?account(r):null;}
- addSession(hash:string,id:string,expires:number){this.#db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(hash,id,expires);}
+ session(hash:string,now:number):Account|null{this.#db.prepare('DELETE FROM sessions WHERE expires<=?').run(now);const r=this.#db.prepare(accountSelect+' JOIN sessions s ON s.account_id=a.id WHERE s.hash=? AND s.expires>? AND s.auth_version=a.auth_version').get(hash,now) as AccountRow|undefined;return r?account(r):null;}
+ addSession(hash:string,id:string,expires:number,expectedVersion?:number){const current=this.byId(id);if(!current||expectedVersion!==undefined&&current.credentialVersion!==expectedVersion)return false;this.#db.prepare('INSERT INTO sessions(hash,account_id,expires,auth_version) VALUES(?,?,?,?)').run(hash,id,expires,current.credentialVersion||0);return true;}
  removeSession(hash:string){this.#db.prepare('DELETE FROM sessions WHERE hash=?').run(hash);}
- revokeSessions(id:string){this.#db.prepare('DELETE FROM sessions WHERE account_id=?').run(id);}
+ revokeSessions(id:string){this.#db.prepare('UPDATE accounts SET auth_version=auth_version+1 WHERE id=?').run(id);this.#db.prepare('DELETE FROM sessions WHERE account_id=?').run(id);}
  updateProfile(id:string,name:string,zone:string,weekStart:number,notebook?:NotebookPreferences){const preferences=notebook||this.byId(id)?.notebook||DEFAULT_NOTEBOOK;this.#db.prepare('UPDATE accounts SET name=?,zone=?,week_start=?,notebook=? WHERE id=?').run(name,zone,weekStart,JSON.stringify(preferences),id);return this.byId(id)!;}
  updatePassword(id:string,passwordHash:string,recoveryHash:string,expected:{recoveryHash?:string;passwordHash?:string}={}):boolean{this.#db.exec('BEGIN IMMEDIATE');try{const a=this.byId(id);if(!a||(expected.recoveryHash&&a.recoveryHash!==expected.recoveryHash)||(expected.passwordHash&&a.passwordHash!==expected.passwordHash)){this.#db.exec('ROLLBACK');return false}this.#db.prepare('UPDATE accounts SET password_hash=?,recovery_hash=? WHERE id=?').run(passwordHash,recoveryHash,id);this.revokeSessions(id);this.#db.exec('COMMIT');return true}catch(error){if(this.#db.isTransaction)this.#db.exec('ROLLBACK');throw error}}
  deleteAccount(id:string){this.#db.exec('BEGIN IMMEDIATE');try{this.#db.prepare('DELETE FROM accounts WHERE id=?').run(id);this.#db.exec('COMMIT');try{this.#db.exec('VACUUM')}catch{/* Secure deletion applies to live records; device backups are outside this app. */}}catch(error){if(this.#db.isTransaction)this.#db.exec('ROLLBACK');throw error;}}
@@ -81,6 +86,11 @@ export class Store {
   if(this.#owner)throw new Error('Nested owner scope is not allowed.');
   this.#owner=owner;
   this.#db.exec('BEGIN IMMEDIATE');try{const result=operation(new Scope(this.#db,owner));this.#db.exec('COMMIT');return result}catch(error){if(this.#db.isTransaction)this.#db.exec('ROLLBACK');throw error}finally{this.#owner=null;}
+ }
+ async scopedAsync<T>(owner:string,operation:(scope:Scope)=>Promise<T>):Promise<T>{
+  if(this.#owner)throw new Error('Nested owner scope is not allowed.');
+  this.#owner=owner;this.#db.exec('BEGIN IMMEDIATE');
+  try{const result=await operation(new Scope(this.#db,owner));this.#db.exec('COMMIT');return result}catch(error){if(this.#db.isTransaction)this.#db.exec('ROLLBACK');throw error}finally{this.#owner=null}
  }
  googleForAccount(id:string):GoogleIdentity|null{const row=this.#db.prepare('SELECT subject,account_id,email,linked_at FROM google_identities WHERE account_id=?').get(id) as {subject:string;account_id:string;email:string;linked_at:string}|undefined;return row?{subject:row.subject,accountId:row.account_id,email:row.email,linkedAt:row.linked_at}:null;}
  googleBySubject(subject:string):Account|null{const row=this.#db.prepare(accountSelect+' WHERE g.subject=?').get(subject) as AccountRow|undefined;return row?account(row):null;}
@@ -93,7 +103,7 @@ export class Store {
  close(){this.#db.close();}
 }
 export class Scope {
- constructor(private db:DatabaseSync,private owner:string){}
+ constructor(private db:SQLiteDatabase,private owner:string){}
  list<T>(kind:string):T[]{return (this.db.prepare('SELECT value FROM owned_records WHERE kind=? ORDER BY id DESC').all(kind) as {value:string}[]).map(r=>JSON.parse(r.value) as T);}
  get<T>(kind:string,id:string):T|null{const r=this.db.prepare('SELECT value FROM owned_records WHERE kind=? AND id=?').get(kind,id) as {value:string}|undefined;return r?JSON.parse(r.value) as T:null;}
  put<T>(kind:string,id:string,value:T){const serialized=JSON.stringify(value);if(this.get(kind,id))this.db.prepare('UPDATE owned_records SET value=? WHERE kind=? AND id=?').run(serialized,kind,id);else this.db.prepare('INSERT INTO owned_records(owner_id,kind,id,value) VALUES(?,?,?,?)').run(this.owner,kind,id,serialized);return value;}

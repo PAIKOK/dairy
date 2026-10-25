@@ -22,6 +22,59 @@ async function choose(p,who='alice',label='Continue with Google'){await p.evalua
 async function scan(p,label){assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,label+' overflow');await p.addScriptTag({path:'node_modules/axe-core/axe.min.js'});const issues=await p.evaluate(async()=>(await window.axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}})).violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)})));assert.deepEqual(issues,[],label+' axe findings');scans.push(label)}
 try{
  await mkdir('artifacts',{recursive:true});
+ // A failed local settings request must be recoverable without losing the form.
+ for(const failure of ['http-404','http-503','network','html','invalid-settings']){
+  await page.route('**/api/auth/google/options',route=>failure==='network'?route.abort():route.fulfill(failure==='html'?{status:200,contentType:'text/html',body:'<!doctype html><title>Static preview</title>'}:failure==='invalid-settings'?{status:200,contentType:'application/json',body:JSON.stringify({configured:true,clientId:'not-a-client-id'})}:{status:failure==='http-404'?404:503,contentType:'application/json',body:JSON.stringify({error:'The diary service is temporarily unavailable.'})}));
+  await page.goto(URL+'/login',{waitUntil:'networkidle'});
+  await page.getByRole('alert').waitFor();
+  const retry=page.getByRole('button',{name:'Retry Google settings',exact:true});await retry.waitFor();
+  assert.equal(await page.getByRole('button',{name:'Come on in',exact:true}).isEnabled(),true);
+  assert.equal(await page.getByRole('button',{name:'Continue with Google',exact:true}).isDisabled(),true);
+  if(failure==='http-404'||failure==='html')assert.match(await page.getByRole('alert').innerText(),/diary API.*npm run dev/s);
+  await page.getByLabel('Email address',{exact:true}).fill('settings-retry@example.test');
+  await page.getByLabel('Password',{exact:true}).fill('keep-this-form-draft');
+  if(failure==='http-404'){await scan(page,'google-settings-error-desktop');await page.screenshot({path:'artifacts/google-settings-error-desktop.png',fullPage:true})}
+  await page.unroute('**/api/auth/google/options');await retry.click();
+  await page.waitForFunction(()=>!document.querySelector('.google-activate')?.disabled);
+  assert.equal(await page.getByRole('alert').count(),0);
+  assert.equal(await page.getByLabel('Email address',{exact:true}).inputValue(),'settings-retry@example.test');
+  assert.equal(await page.getByLabel('Password',{exact:true}).inputValue(),'keep-this-form-draft');
+  assert.equal(sdkRequests,0,'Retrying local settings must not load Google');
+  record('Google settings recover from '+failure+' without reload, form loss, false success, or loading Google');
+ }
+ // Exercise hosted-origin copy using an intercepted HTTPS fixture, never the live site.
+ const hostedOrigin='https://diary-deployment.test',hostedContext=await browser.newContext({viewport:{width:320,height:812},reducedMotion:'reduce'});
+ let hostedExternal=0;hostedContext.on('request',request=>{if(new globalThis.URL(request.url()).origin!==hostedOrigin)hostedExternal++});
+ try{
+  await hostedContext.route(hostedOrigin+'/**',async route=>{
+   const requestUrl=new globalThis.URL(route.request().url());
+   if(requestUrl.pathname.startsWith('/api/'))return route.fulfill({status:404,contentType:'application/json',body:JSON.stringify({error:'Not Found'})});
+   return route.fulfill({response:await context.request.get(URL+requestUrl.pathname+requestUrl.search)});
+  });
+  const hosted=await hostedContext.newPage();hosted.on('pageerror',error=>errors.push(error.message));
+  await hosted.goto(hostedOrigin+'/signup',{waitUntil:'networkidle'});await hosted.getByRole('alert').filter({hasText:'site owner deploys the API with persistent storage'}).waitFor();
+  await hosted.getByLabel('Email address',{exact:true}).fill('hosted-api-fixture@example.test');await hosted.getByLabel('Choose a password (10+ characters)').fill('a-hosted-fixture-password');
+  await hosted.getByRole('checkbox',{name:/18 or older/}).check();await hosted.getByRole('button',{name:'Start my little life',exact:true}).click();
+  await hosted.waitForFunction(()=>document.querySelectorAll('.notice-error').length===2);
+  for(const message of await hosted.getByRole('alert').allInnerTexts()){assert.match(message,/site owner deploys the API with persistent storage/);assert.doesNotMatch(message,/npm run dev/)}
+  assert.equal(await hosted.getByLabel('Email address',{exact:true}).inputValue(),'hosted-api-fixture@example.test');assert.equal(await hosted.getByRole('heading',{name:'Keep a way back.',exact:true}).count(),0);
+  assert.equal(hostedExternal,0);await scan(hosted,'hosted-api-error-320');await hosted.screenshot({path:'artifacts/hosted-api-error-320.png',fullPage:true});
+  record('An intercepted hosted-origin signup fixture explains the missing persistent API, never asks visitors to start local servers, and fits 320px without creating an account');
+ }finally{await hostedContext.close()}
+ // A deliberately unconfigured server is a distinct, non-error state.
+ await page.route('**/api/auth/google/options',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({configured:false,clientId:null})}));
+ await page.goto(URL+'/login',{waitUntil:'networkidle'});await page.getByText('Google sign-in is not configured on this server yet.',{exact:true}).waitFor();
+ assert.equal(await page.getByRole('alert').count(),0);assert.equal(await page.getByRole('button',{name:'Come on in',exact:true}).isEnabled(),true);
+ await page.unroute('**/api/auth/google/options');record('An unconfigured Google client is not reported as a failed request; the password form remains enabled');
+ // Missing signup endpoints are explained; no account or recovery-code handoff is invented.
+ await page.route('**/api/signup',route=>route.fulfill({status:404,contentType:'text/html',body:'<h1>Not Found</h1>'}));
+ await page.goto(URL+'/signup',{waitUntil:'networkidle'});await page.getByLabel('Email address',{exact:true}).fill('missing-api@example.test');
+ await page.getByLabel('Choose a password (10+ characters)').fill('a-settings-regression-password');await page.getByRole('checkbox',{name:/18 or older/}).check();
+ await page.getByRole('button',{name:'Start my little life',exact:true}).click();await page.getByRole('alert').filter({hasText:'The diary API is not available'}).waitFor();
+ assert.equal((await context.request.get(URL+'/api/book')).status(),401);assert.equal(await page.getByRole('heading',{name:'Keep a way back.',exact:true}).count(),0);
+ assert.equal(await page.getByLabel('Email address',{exact:true}).inputValue(),'missing-api@example.test');
+ await page.setViewportSize({width:320,height:812});await scan(page,'signup-api-error-320');await page.screenshot({path:'artifacts/signup-api-error-320.png',fullPage:true});
+ await page.unroute('**/api/signup');await page.setViewportSize({width:1440,height:1050});record('Signup 404 explains the missing backend, preserves inputs, and never simulates account creation, including at 320px');
  await page.goto(URL+'/login',{waitUntil:'networkidle'});await page.waitForFunction(()=>!document.querySelector('.google-activate')?.disabled);assert.equal(sdkRequests,0);assert.equal(await page.locator('script[src*="accounts.google.com"]').count(),0);assert.equal(await page.getByLabel('Password',{exact:true}).isVisible(),true);await scan(page,'login-desktop');await page.screenshot({path:'artifacts/google-login-desktop.png',fullPage:true});record('Google is optional: no Google script or requests before choosing it; password login remains available');
  await page.goto(URL+'/signup',{waitUntil:'networkidle'});assert.equal(await page.getByRole('button',{name:'Continue with Google',exact:true}).isDisabled(),true);await page.getByRole('checkbox',{name:/18 or older/}).check();await choose(page);await page.getByRole('heading',{name:'Keep a way back.',exact:true}).waitFor();const recovery=await page.getByLabel('Your recovery code').inputValue();assert.ok(recovery.length>30);const alice=(await getBook()).profile;assert.equal(alice.googleLinked,true);assert.equal(alice.hasPassword,false);assert.equal(alice.email,people.alice.email);await page.getByRole('checkbox',{name:'I have saved my recovery code somewhere private.'}).check();await page.getByRole('button',{name:'Open my diary',exact:true}).click();await page.waitForURL(URL+'/diary');await page.getByRole('button',{name:'Open my diary',exact:true}).waitFor();assert.equal(await page.evaluate(()=>typeof window.google),'undefined');record('Mocked Google sign-up requires terms, creates a private Google-only account, shows recovery, and reloads without the Google SDK on the diary');
  await page.goto(URL+'/diary/day/2027-05-15',{waitUntil:'networkidle'});await page.getByLabel('Give this day a title').fill('A Google-kept page');await page.getByLabel('Your diary entry').fill('My page remains mine after a Google sign-in.');await page.getByRole('button',{name:'Save now',exact:true}).click();await page.getByRole('status').filter({hasText:'Saved on local server'}).waitFor();await post('/logout',{});await page.goto(URL+'/login',{waitUntil:'networkidle'});await choose(page);await page.waitForURL(URL+'/diary');assert.equal((await getBook()).profile.id,alice.id);assert.equal((await getBook()).entries[0].body,'My page remains mine after a Google sign-in.');record('Mocked Google login returns to the same account and preserves real locally stored writing');

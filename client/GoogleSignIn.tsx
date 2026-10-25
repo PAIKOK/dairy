@@ -1,6 +1,6 @@
 import {useEffect,useLayoutEffect,useRef,useState} from 'react';
 import type {Profile} from '../shared/types';
-import {api,errorMessage} from './api';
+import {api,ApiError,errorMessage} from './api';
 import {Notice} from './ui';
 
 type GoogleSDK={accounts:{id:{initialize:(options:{client_id:string;nonce:string;callback:(value:{credential?:string})=>void;auto_select:boolean;ux_mode:'popup'})=>void;renderButton:(element:HTMLElement,options:{type:'standard';theme:'outline';size:'large';text:'continue_with';shape:'rectangular';width:number})=>void}}};
@@ -24,7 +24,29 @@ export function GoogleSignIn(props:Props){
  const [clientId,setClientId]=useState<string|null>(null),[configLoading,setConfigLoading]=useState(true),[configError,setConfigError]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[flow,setFlow]=useState<{clientId:string;nonce:string;version:number}|null>(null);
  const slot=useRef<HTMLDivElement>(null),alive=useRef(true),version=useRef(0),posting=useRef(false),referrer=useRef<HTMLMetaElement|null>(null);
  const blocked=props.disabled||(props.purpose==='signup'&&!props.consent);
- useEffect(()=>{alive.current=true;api<{configured:boolean;clientId:string|null}>('/auth/google/options').then(result=>{if(alive.current)setClientId(result.configured?result.clientId:null)}).catch(()=>{if(alive.current)setConfigError('Google sign-in settings could not be loaded. Email/password is still available.')}).finally(()=>{if(alive.current)setConfigLoading(false)});return()=>{alive.current=false;version.current++;referrer.current?.remove();latest.current.onBusyChange?.(false)}},[]);
+ const optionsVersion=useRef(0),optionsController=useRef<AbortController|null>(null);
+ async function loadOptions(){
+  const request=++optionsVersion.current;
+  optionsController.current?.abort();
+  const controller=new AbortController();optionsController.current=controller;
+  setConfigLoading(true);setConfigError('');setClientId(null);
+  let timedOut=false;
+  const timer=setTimeout(()=>{timedOut=true;controller.abort()},10000);
+  try{
+   const result=await api<{configured?:unknown;clientId?:unknown}>('/auth/google/options',undefined,undefined,controller.signal);
+   const valid=result.configured===false&&result.clientId===null||result.configured===true&&typeof result.clientId==='string'&&/^[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/.test(result.clientId);
+   if(!valid)throw new Error('The diary server returned unreadable Google sign-in settings. Restart the app, then retry.');
+   if(alive.current&&optionsVersion.current===request)setClientId(result.configured?result.clientId as string:null);
+  }catch(error){
+   if(alive.current&&optionsVersion.current===request&&(!controller.signal.aborted||timedOut)){
+    setConfigError(timedOut?'Google sign-in settings took too long to load from the diary server. Check your connection or try again when the service is available.':error instanceof ApiError&&error.status===0?'Google sign-in settings could not be loaded from the diary server. Check your connection, then retry.':errorMessage(error));
+   }
+  }finally{
+   clearTimeout(timer);
+   if(alive.current&&optionsVersion.current===request){optionsController.current=null;setConfigLoading(false)}
+  }
+ }
+ useEffect(()=>{alive.current=true;void loadOptions();return()=>{alive.current=false;optionsVersion.current++;optionsController.current?.abort();version.current++;referrer.current?.remove();latest.current.onBusyChange?.(false)}},[]);
  function markBusy(value:boolean){if(alive.current)setBusy(value);latest.current.onBusyChange?.(value)}
  function reset(){version.current++;setFlow(null);setError('');posting.current=false;markBusy(false)}
  async function prepare(){
@@ -51,13 +73,15 @@ export function GoogleSignIn(props:Props){
   posting.current=true;markBusy(true);setError('');
   try{const result=await api<GoogleResult>('/auth/google',{credential,...(latest.current.purpose==='delete'?{confirm:latest.current.confirm}:{})});if(alive.current&&request===version.current)latest.current.onSuccess(result)}catch(e){if(alive.current&&request===version.current){setError(errorMessage(e));setFlow(null)}}finally{posting.current=false;if(alive.current&&request===version.current)markBusy(false)}
  }
- return <div className="google-sign-in" aria-busy={busy}>
-  {!flow&&<button type="button" className="button button-outline google-activate" disabled={!!blocked||busy||configLoading||!clientId} onClick={()=>void prepare()}>{busy?'Loading Google sign-in…':props.label||'Continue with Google'}</button>}
+ return <div className="google-sign-in" aria-busy={busy||configLoading}>
+  {!flow&&<button type="button" className="button button-outline google-activate" disabled={!!blocked||busy||configLoading||!clientId} onClick={()=>void prepare()}>{configLoading?'Checking Google sign-in…':busy?'Loading Google sign-in…':props.label||'Continue with Google'}</button>}
   {flow&&<><div className="google-button-slot" ref={slot}/><p className="google-sign-in-note">Use Google’s button above to choose your account. No diary writing or photos are attached.</p><button type="button" className="text-link" disabled={busy} onClick={reset}>Start Google sign-in again</button></>}
+  {configLoading&&<p className="google-sign-in-note" role="status">Checking Google settings with the diary server…</p>}
   {busy&&<p className="form-note" role="status">{posting.current?'Verifying your Google sign-in…':'Preparing Google’s sign-in button…'}</p>}
   {props.purpose==='signup'&&!props.consent&&<p className="google-sign-in-note">First confirm the age and terms checkbox above. Google sign-up does not require a diary password.</p>}
   {!flow&&!busy&&clientId&&<p className="google-sign-in-note">Optional. Choosing Google loads its sign-in service. Email/password stays available.</p>}
   {!configLoading&&!clientId&&!configError&&<p className="google-sign-in-note">Google sign-in is not configured on this server yet.</p>}
   {(error||configError)&&<Notice error>{error||configError}</Notice>}
+  {configError&&<button type="button" className="text-link" disabled={configLoading||busy} onClick={()=>void loadOptions()}>Retry Google settings</button>}
  </div>;
 }
