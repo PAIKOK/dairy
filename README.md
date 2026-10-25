@@ -114,6 +114,7 @@ Curated writing prompts work without an external provider. The existing Gemini R
 ## Checks
 
 ```sh
+npm run test:vercel-runtime # after vercel build: native emitted-function startup, no tsx
 npm run check           # TypeScript for client/server/tests, then production frontend build
 npm test                # date, autosave, privacy, API, recovery, export/deletion and persistence tests
 npm run test:browser:mongo # isolated MongoDB + full Chrome journeys, then cleanup
@@ -142,3 +143,7 @@ See `PROGRESS.md` for the current verification state and `docs/SECURITY-AND-LAUN
 - `shared/` — shared date logic, data types, validated input contracts
 
 The app uses React, React Router, Express, Zod, and Vite. Fonts and sample images are self-hosted; see `docs/ASSETS.md` for provenance and font licenses.
+
+## Native server-module check
+
+Server/API/shared imports use `.js` specifiers so Vercel’s emitted ES modules resolve under native Node. `npm run check` includes a separate NodeNext server check. After `vercel build --prod`, run `npm run test:vercel-runtime`; it loads the emitted function without tsx and verifies a handled JSON 503 with intentionally missing configuration. This test cannot connect to real MongoDB. A successful package build alone is not a runtime startup test.

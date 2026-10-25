@@ -48,3 +48,9 @@ If status returns 503, review Atlas network access, URI/database permissions, re
 Tests use a real disposable local MongoDB replica set, never Atlas personal data. They cover persistence across clients/reconnection, all saved page types, owner rejection in the API and database validator, concurrent entry/quota behavior, transaction rollback, Google nonce persistence, exports, recovery and deletion. The full Chrome journey also runs against MongoDB. Separate legacy SQLite and mocked Google regressions preserve local behavior.
 
 Local/fixture tests are not proof of the live Atlas network path, a real Google account chooser, managed backups, legal compliance or an independent security audit. Production policies/operator details, regions, backups, email ownership verification/recovery and broader accessibility/device checks still need review.
+
+## October 25 runtime-startup correction
+
+After the first MongoDB commit, the live deployment invoked the API but returned HTTP 500 FUNCTION_INVOCATION_FAILED. Native import of the emitted function reproduced ERR_MODULE_NOT_FOUND for extensionless server/bootstrap. The tsx-based tests and package-only build had not exercised this path. Server/API/shared relative imports now use emitted .js paths. A separate NodeNext compiler check and a plain-Node built-function startup regression protect this runtime boundary. Server-side initialization logs include only error type/numeric code, never a URI, credential, raw error message or diary input. Non-JSON HTTP 5xx responses are now described as server errors rather than claiming the API is undeployed.
+
+Correction checks passed: NodeNext server type checking, 70 automated tests, Vercel production packaging, and the native emitted-function import/handled-JSON-503 smoke test. A live re-deployment check is still required after this commit.

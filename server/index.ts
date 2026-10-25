@@ -1,4 +1,4 @@
-import {createConfiguredApp} from './bootstrap';
+import {createConfiguredApp} from './bootstrap.js';
 const host=process.env.HOST||'127.0.0.1',port=Number(process.env.PORT||4017);
 if(!['127.0.0.1','localhost','::1'].includes(host))throw new Error('This development entry point only binds to loopback. Use the Vercel API entry point for hosted access.');
 let configured:Awaited<ReturnType<typeof createConfiguredApp>>;

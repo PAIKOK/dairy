@@ -90,3 +90,9 @@ See SECURITY-AND-LAUNCH.md for required human review before public availability.
 - Mocked Google/settings Chrome tests: 17 groups and 10 selected scans passed, with no runtime errors or unexpected requests. This is not a real Google account-chooser test.
 - npm audit after patching the reported Vite/Zod/body-parser issues: zero vulnerabilities.
 - Vercel variable names were verified; secrets were not printed/committed. Real Atlas connectivity was not tested locally because the sensitive Vercel URI cannot be downloaded. Check the Git-triggered deployed runtime separately.
+
+## October 25 runtime-startup correction
+
+After the first MongoDB commit, the live deployment invoked the API but returned HTTP 500 FUNCTION_INVOCATION_FAILED. Native import of the emitted function reproduced ERR_MODULE_NOT_FOUND for extensionless server/bootstrap. The tsx-based tests and package-only build had not exercised this path. Server/API/shared relative imports now use emitted .js paths. A separate NodeNext compiler check and a plain-Node built-function startup regression protect this runtime boundary. Server-side initialization logs include only error type/numeric code, never a URI, credential, raw error message or diary input. Non-JSON HTTP 5xx responses are now described as server errors rather than claiming the API is undeployed.
+
+Correction checks passed: NodeNext server type checking, 70 automated tests, Vercel production packaging, and the native emitted-function import/handled-JSON-503 smoke test. A live re-deployment check is still required after this commit.

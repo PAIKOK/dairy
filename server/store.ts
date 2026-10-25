@@ -2,8 +2,8 @@ import type {DatabaseSync as SQLiteDatabase} from 'node:sqlite';
 import {createRequire} from 'node:module';
 import {mkdirSync,chmodSync} from 'node:fs';
 import {join} from 'node:path';
-import {DEFAULT_NOTEBOOK,type NotebookPreferences} from '../shared/notebook';
-import type {Profile} from '../shared/types';
+import {DEFAULT_NOTEBOOK,type NotebookPreferences} from '../shared/notebook.js';
+import type {Profile} from '../shared/types.js';
 
 export const GOOGLE_ONLY_PASSWORD='!google-only';
 export type GoogleIdentity={subject:string;accountId:string;email:string;linkedAt:string};

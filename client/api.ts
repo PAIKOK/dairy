@@ -5,6 +5,7 @@ function missingBackend(){
   ?'The diary API is not available at this address. Start both app servers with npm run dev and open the app address printed in the terminal. A static-only preview cannot create accounts, sign in, or save diary data.'
   :'This website’s diary service is not connected. Account creation, sign-in, and saving are unavailable until the site owner deploys the API with persistent storage. Your request has not succeeded; your form entries have not been cleared.';
 }
+const unreadableResponse=(status:number)=>status>=500?`The diary service returned a server error (HTTP ${status}). This request has not succeeded. Please try again after the service is restored; your form entries have not been cleared.`:missingBackend();
 const authRoute=/^\/(?:signup|login|recover|session|auth\/google\/options)$/;
 export async function api<T>(path:string,body?:unknown,method?:string,signal?:AbortSignal):Promise<T>{
  let response:Response;
@@ -17,9 +18,9 @@ export async function api<T>(path:string,body?:unknown,method?:string,signal?:Ab
  let result:unknown;
  try{result=await response.json()}catch(error){
   if(signal?.aborted)throw error;
-  throw new ApiError(response.ok?502:response.status,missingBackend());
+  throw new ApiError(response.ok?502:response.status,unreadableResponse(response.status));
  }
- if(!result||typeof result!=='object'||Array.isArray(result))throw new ApiError(response.ok?502:response.status,missingBackend());
+ if(!result||typeof result!=='object'||Array.isArray(result))throw new ApiError(response.ok?502:response.status,unreadableResponse(response.status));
  if(!response.ok){
   const message=(result as {error?:unknown}).error;
   throw new ApiError(response.status,response.status===404&&authRoute.test(path)?missingBackend():typeof message==='string'?message:`The request failed (${response.status}).`);

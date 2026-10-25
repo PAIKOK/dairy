@@ -1,6 +1,6 @@
 import {resolve,sep} from 'node:path';
-import {createApp} from './app';
-import {MongoStore} from './mongo-store';
+import {createApp} from './app.js';
+import {MongoStore} from './mongo-store.js';
 
 export function hostedConfiguration(environment:NodeJS.ProcessEnv){
  const cloud=environment.VERCEL==='1'||environment.NODE_ENV==='production';

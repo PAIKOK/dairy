@@ -1,5 +1,5 @@
-import {Store,type Scope,type Account,type GoogleChallenge,type GoogleIdentity} from './store';
-import type {NotebookPreferences} from '../shared/notebook';
+import {Store,type Scope,type Account,type GoogleChallenge,type GoogleIdentity} from './store.js';
+import type {NotebookPreferences} from '../shared/notebook.js';
 
 export class AccountUnavailable extends Error{constructor(){super('Your account or credentials changed. Sign in again before continuing.')}}
 export type AuthProof={passwordHash?:string;credentialVersion?:number;sessionHash?:string;googleSubject?:string;now?:number};

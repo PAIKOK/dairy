@@ -1,6 +1,6 @@
 import {z} from 'zod';
-import {STICKER_KINDS} from './notebook';
-import {validDate,validZone} from './dates';
+import {STICKER_KINDS} from './notebook.js';
+import {validDate,validZone} from './dates.js';
 export const dateSchema=z.string().refine(validDate,'Choose a real date between 1900 and 2200.');
 export const passwordSchema=z.string().min(10,'Use at least 10 characters.').max(200,'Use no more than 200 characters.');
 const email=z.string().trim().toLowerCase().email('Enter a valid email address.').max(254);

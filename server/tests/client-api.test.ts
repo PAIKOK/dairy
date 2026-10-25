@@ -41,3 +41,8 @@ test('a deployed site explains its missing backend without telling visitors to r
  const request=mock.method(globalThis,'fetch',async()=>new Response('Not Found',{status:404,headers:{'Content-Type':'text/plain'}}));
  try{await assert.rejects(api('/signup',{}),error=>error instanceof ApiError&&error.status===404&&/site owner deploys the API with persistent storage/.test(error.message)&&!/npm run dev/.test(error.message))}finally{request.mock.restore();if(previous)Object.defineProperty(globalThis,'window',previous);else Reflect.deleteProperty(globalThis,'window')}
 });
+
+test('a crashed deployed function is reported as a server error, not a missing deployment',async()=>{
+ const request=mock.method(globalThis,'fetch',async()=>new Response('FUNCTION_INVOCATION_FAILED',{status:500,headers:{'Content-Type':'text/plain'}}));
+ try{await assert.rejects(api('/signup',{}),error=>error instanceof ApiError&&error.status===500&&/server error \(HTTP 500\)/.test(error.message)&&!/site owner deploys|npm run dev/.test(error.message))}finally{request.mock.restore()}
+});

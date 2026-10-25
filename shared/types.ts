@@ -1,4 +1,4 @@
-import type {NotebookPreferences,PageDesign} from './notebook';
+import type {NotebookPreferences,PageDesign} from './notebook.js';
 export type Mood = 'joyful'|'good'|'quiet'|'low'|'tough';
 export const MOODS: {id:Mood;label:string;face:string}[] = [{id:'joyful',label:'Joyful',face:'☀'},{id:'good',label:'Good',face:'◡'},{id:'quiet',label:'Quiet',face:'≈'},{id:'low',label:'Low',face:'☁'},{id:'tough',label:'Tough',face:'☂'}];
 export type Profile = {id:string;name:string;email:string;timeZone:string;weekStart:0|1;createdAt:string;notebook?:NotebookPreferences;hasPassword?:boolean;googleLinked?:boolean;googleEmail?:string};

@@ -1,9 +1,9 @@
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {isDeepStrictEqual} from 'node:util';
 import {MongoClient,Binary,type ClientSession,type Collection,type Document,type Db,type MongoClientOptions} from 'mongodb';
-import {DEFAULT_NOTEBOOK,type NotebookPreferences} from '../shared/notebook';
-import {GOOGLE_ONLY_PASSWORD,type Account,type GoogleIdentity,type GoogleChallenge} from './store';
-import {AccountUnavailable,type AuthProof,type DiaryScope,type DiaryStore} from './storage';
+import {DEFAULT_NOTEBOOK,type NotebookPreferences} from '../shared/notebook.js';
+import {GOOGLE_ONLY_PASSWORD,type Account,type GoogleIdentity,type GoogleChallenge} from './store.js';
+import {AccountUnavailable,type AuthProof,type DiaryScope,type DiaryStore} from './storage.js';
 
 const KINDS={entry:'entries',memory:'memories',goal:'goals',letter:'letters',song:'songs'} as const;
 type AccountDoc=Document&{_id:string;email:string;name:string;passwordHash:string;recoveryHash:string;timeZone:string;weekStart:0|1;createdAt:string;notebook:NotebookPreferences;authVersion:number;revision:number;sessionSequence:number};

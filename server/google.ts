@@ -2,11 +2,11 @@ import {OAuth2Client} from 'google-auth-library';
 import type {Express,RequestHandler,Response} from 'express';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {z} from 'zod';
-import {validZone} from '../shared/dates';
-import type {Profile} from '../shared/types';
-import {GOOGLE_ONLY_PASSWORD,type Account} from './store';
-import {AccountUnavailable,type DiaryStore} from './storage';
-import {digest,verifyPassword,secretMatches,DUMMY_HASH} from './password';
+import {validZone} from '../shared/dates.js';
+import type {Profile} from '../shared/types.js';
+import {GOOGLE_ONLY_PASSWORD,type Account} from './store.js';
+import {AccountUnavailable,type DiaryStore} from './storage.js';
+import {digest,verifyPassword,secretMatches,DUMMY_HASH} from './password.js';
 
 export const GOOGLE_CHALLENGE_COOKIE='little_life_google';
 export type GoogleClaims={iss?:unknown;aud?:unknown;sub?:unknown;email?:unknown;email_verified?:unknown;name?:unknown;given_name?:unknown;nonce?:unknown;exp?:unknown};

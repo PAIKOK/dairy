@@ -79,3 +79,9 @@ See README.md, docs/VERIFICATION.md and docs/SECURITY-AND-LAUNCH.md. These check
 MongoDB uses the official driver. The test-only replica-set helper is not part of the API runtime and its install-time binary download is disabled. The observed Vite/Zod/body-parser advisories were patched; the subsequent npm audit reported zero vulnerabilities. This is not an independent security audit.
 
 - Final local Vercel production packaging check (`vercel build --prod`) passed; the API function was included. This is a packaging check, not a live Atlas or Google test.
+
+## October 25 runtime-startup correction
+
+After the first MongoDB commit, the live deployment invoked the API but returned HTTP 500 FUNCTION_INVOCATION_FAILED. Native import of the emitted function reproduced ERR_MODULE_NOT_FOUND for extensionless server/bootstrap. The tsx-based tests and package-only build had not exercised this path. Server/API/shared relative imports now use emitted .js paths. A separate NodeNext compiler check and a plain-Node built-function startup regression protect this runtime boundary. Server-side initialization logs include only error type/numeric code, never a URI, credential, raw error message or diary input. Non-JSON HTTP 5xx responses are now described as server errors rather than claiming the API is undeployed.
+
+Correction checks passed: NodeNext server type checking, 70 automated tests, Vercel production packaging, and the native emitted-function import/handled-JSON-503 smoke test. A live re-deployment check is still required after this commit.
